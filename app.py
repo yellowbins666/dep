@@ -19,7 +19,7 @@ NEZHA_KEY = os.getenv("NEZHA_KEY")
 NEZHA_TLS = os.getenv("NEZHA_TLS")
 WARP = os.getenv("WARP")
 
-# 优先读取平台传入的 PORT 环境变量，默认使用 8080
+# 优先读取平台环境变量 PORT
 PORT = int(os.getenv("PORT", 8080))
 
 current_token = ""
@@ -41,7 +41,7 @@ def get_token():
 
 
 def run_cli(token):
-    """启动或重启 /app/Cli 进程"""
+    """启动或重启 /app/Cli 进程，强制在可写的 /tmp 目录下运行"""
     global cli_process
     with process_lock:
         if cli_process and cli_process.poll() is None:
@@ -54,8 +54,18 @@ def run_cli(token):
 
         cmd = ["/app/Cli", "start", "accept", "--token", token]
         print(f"[Cli] 正在启动: {' '.join(cmd)}", flush=True)
+        
+        # 将工作目录和用户目录重定向到可写的 /tmp
+        env = os.environ.copy()
+        env["HOME"] = "/tmp"
+        env["TMPDIR"] = "/tmp"
+        
         try:
-            cli_process = subprocess.Popen(cmd)
+            cli_process = subprocess.Popen(
+                cmd,
+                cwd="/tmp",
+                env=env
+            )
         except Exception as e:
             print(f"[Cli] 启动异常: {e}", flush=True)
 
@@ -73,7 +83,7 @@ def token_watcher():
 
 
 def start_nezha():
-    """下载并启动哪吒探针"""
+    """下载并启动哪吒探针（保存在 /tmp 目录下执行）"""
     if not (NEZHA_SERVER and NEZHA_PORT and NEZHA_KEY):
         return
 
@@ -82,14 +92,16 @@ def start_nezha():
     target_arch = arch_map.get(arch, arch)
 
     nezha_zip_url = f"https://github.com/nezhahq/agent/releases/latest/download/nezha-agent_linux_{target_arch}.zip"
+    zip_path = "/tmp/nezha-agent.zip"
+    agent_bin = "/tmp/nezha-agent"
+    
     try:
-        print("[Nezha] 正在下载哪吒探针...", flush=True)
-        urllib.request.urlretrieve(nezha_zip_url, "/app/nezha-agent.zip")
-        shutil.unpack_archive("/app/nezha-agent.zip", "/app")
-        if os.path.exists("/app/nezha-agent.zip"):
-            os.remove("/app/nezha-agent.zip")
+        print("[Nezha] 正在下载哪吒探针到 /tmp ...", flush=True)
+        urllib.request.urlretrieve(nezha_zip_url, zip_path)
+        shutil.unpack_archive(zip_path, "/tmp")
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
 
-        agent_bin = "/app/nezha-agent"
         os.chmod(agent_bin, 0o755)
 
         cmd = [agent_bin, "-s", f"{NEZHA_SERVER}:{NEZHA_PORT}", "-p", NEZHA_KEY]
@@ -97,7 +109,7 @@ def start_nezha():
             cmd.append("--tls")
 
         print(f"[Nezha] 启动探针: {' '.join(cmd)}", flush=True)
-        subprocess.Popen(cmd)
+        subprocess.Popen(cmd, cwd="/tmp")
     except Exception as e:
         print(f"[Nezha] 探针启动失败: {e}", flush=True)
 
@@ -113,7 +125,7 @@ def start_warp():
 
 
 def background_init():
-    """异步初始化后台服务，避免阻塞 Web 服务的端口健康检查"""
+    """异步初始化后台服务"""
     global current_token
     time.sleep(1)
     start_warp()
@@ -130,7 +142,6 @@ def background_init():
 # ================= Flask 路由 =================
 @app.route("/healthz")
 def healthz():
-    """用于平台的保活健康检查"""
     return "OK", 200
 
 
@@ -141,7 +152,6 @@ def proxy(path):
     if request.query_string:
         target_url = f"{target_url}?{request.query_string.decode('utf-8')}"
 
-    # 剔除逐跳标头
     headers = {k: v for k, v in request.headers if k.lower() not in ["host", "content-length"]}
     headers["Host"] = TARGET_WEB.split("//")[-1].split("/")[0]
 
@@ -166,10 +176,8 @@ def proxy(path):
 
 
 if __name__ == "__main__":
-    # 在独立后台线程中异步拉起 Cli、WARP 和哪吒探针
     init_thread = threading.Thread(target=background_init, daemon=True)
     init_thread.start()
 
-    # 主线程立即监听端口，确保平台健康检查能第一时间连通
     print(f"[Web] 正在启动 Web 服务，监听端口: {PORT}", flush=True)
     app.run(host="0.0.0.0", port=PORT)
