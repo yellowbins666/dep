@@ -19,7 +19,7 @@ NEZHA_KEY = os.getenv("NEZHA_KEY")
 NEZHA_TLS = os.getenv("NEZHA_TLS")
 
 # 将默认端口从 8080 改为 80，适配 Infrlo 平台的默认网关路由
-PORT = int(os.getenv("PORT", 80))
+PORT = int(os.getenv("PORT", 3000))
 
 CLI_PATH = "/tmp/Cli"
 current_token = ""
