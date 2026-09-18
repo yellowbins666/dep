@@ -209,6 +209,6 @@ if __name__ == "__main__":
 
     # 打印平台给容器注入的所有环境变量，查看真实端口 key
     print(f"[Debug] 当前环境变量: {dict(os.environ)}", flush=True)
-    
+
     print(f"[Web] 正在启动 Web 服务，监听端口: {PORT}", flush=True)
     app.run(host="0.0.0.0", port=PORT)
