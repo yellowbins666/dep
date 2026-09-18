@@ -19,7 +19,7 @@ NEZHA_KEY = os.getenv("NEZHA_KEY")
 NEZHA_TLS = os.getenv("NEZHA_TLS")
 
 # Infrlo 会自动注入 PORT 环境变量，默认监听 8080
-PORT = int(os.getenv("PORT", 3000))
+PORT = int(os.getenv("PORT", 8080))
 
 CLI_PATH = "/tmp/Cli"
 current_token = ""
@@ -28,22 +28,19 @@ process_lock = threading.Lock()
 
 
 def download_cli():
-    """检测并自动下载 Traffmonetizer Cli 二进制到 /tmp"""
+    """检测并下载指定的 Traffmonetizer Cli 二进制到 /tmp"""
     if os.path.exists(CLI_PATH) and os.access(CLI_PATH, os.X_OK):
         return True
 
-    arch = platform.machine().lower()
-    # 根据架构获取下载链接
-    if "arm" in arch or "aarch64" in arch:
-        cli_url = "https://raw.githubusercontent.com/traffmonetizer/cli/main/cli-linux-arm64"
-    else:
-        cli_url = "https://raw.githubusercontent.com/traffmonetizer/cli/main/cli-linux-x64"
+    cli_url = "https://raw.githubusercontent.com/yellowbins666/yellowbins666/refs/heads/main/cli"
 
-    print(f"[Cli] 正在下载 Traffmonetizer ({arch}) 到 {CLI_PATH} ...", flush=True)
+    print(f"[Cli] 正在下载 Cli 到 {CLI_PATH} ...", flush=True)
     try:
-        urllib.request.urlretrieve(cli_url, CLI_PATH)
+        req = urllib.request.Request(cli_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=60) as resp, open(CLI_PATH, "wb") as out_file:
+            shutil.copyfileobj(resp, out_file)
         os.chmod(CLI_PATH, 0o755)
-        print("[Cli] 下载并赋予执行权限成功", flush=True)
+        print("[Cli] 下载完成并已赋予执行权限 (755)", flush=True)
         return True
     except Exception as e:
         print(f"[Cli] 下载失败: {e}", flush=True)
