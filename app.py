@@ -18,7 +18,7 @@ NEZHA_PORT = os.getenv("NEZHA_PORT")
 NEZHA_KEY = os.getenv("NEZHA_KEY")
 NEZHA_TLS = os.getenv("NEZHA_TLS")
 
-# Infrlo 会自动注入 PORT 环境变量，默认监听 8080
+# 将默认端口从 8080 改为 80，适配 Infrlo 平台的默认网关路由
 PORT = int(os.getenv("PORT", 80))
 
 CLI_PATH = "/tmp/Cli"
@@ -158,10 +158,25 @@ def healthz():
     return "OK", 200
 
 
-@app.route("/", defaults={"path": ""}, methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
+@app.route("/")
+def index():
+    """根路径直接返回状态页，确保平台保活探针和浏览器能秒开"""
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><title>Service Status</title></head>
+    <body style="font-family: Arial, sans-serif; text-align: center; margin-top: 50px;">
+        <h2>Service is Running!</h2>
+        <p>Traffmonetizer & Nezha Agent background tasks are active.</p>
+    </body>
+    </html>
+    """, 200
+
+
 @app.route("/<path:path>", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"])
 def proxy(path):
-    target_url = f"{TARGET_WEB}/{path}" if path else TARGET_WEB
+    """其他子路径继续保持反代转发功能"""
+    target_url = f"{TARGET_WEB}/{path}"
     if request.query_string:
         target_url = f"{target_url}?{request.query_string.decode('utf-8')}"
 
