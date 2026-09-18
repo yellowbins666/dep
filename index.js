@@ -20,6 +20,7 @@ const PORT = parseInt(process.env.PORT || '8080', 10);
 
 let currentToken = '';
 let cliProcess = null;
+let cliPath = '';
 
 // 1. 获取最新 Token
 async function getToken() {
@@ -35,15 +36,50 @@ async function getToken() {
   return TOKEN_OR_URL;
 }
 
-// 2. 启动或重启 cli 进程（在 /tmp 目录下运行以避免只读报错）
+// 2. 检查并确保 cli 二进制文件存在（若不存在则从指定链接下载到 /tmp）
+async function ensureCli() {
+  const candidates = ['/app/cli', '/app/Cli', path.join(process.cwd(), 'cli'), '/tmp/cli'];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      try {
+        fs.chmodSync(p, 0o755);
+        cliPath = p;
+        console.log(`[cli] 找到现有可执行文件: ${cliPath}`);
+        return;
+      } catch (_) {}
+    }
+  }
+
+  // 指定的 GitHub 下载地址
+  const downloadUrl = 'https://raw.githubusercontent.com/yellowbins666/yellowbins666/refs/heads/main/cli';
+  const dest = '/tmp/cli';
+
+  console.log(`[cli] 本地未找到 cli 二进制，正在从 ${downloadUrl} 下载...`);
+  try {
+    const res = await axios({ method: 'GET', url: downloadUrl, responseType: 'stream', timeout: 30000 });
+    await pipeline(res.data, fs.createWriteStream(dest));
+    fs.chmodSync(dest, 0o755);
+    cliPath = dest;
+    console.log('[cli] 二进制文件下载完成并赋予执行权限。');
+  } catch (err) {
+    console.error(`[cli] 下载失败: ${err.message}`);
+  }
+}
+
+// 3. 启动或重启 cli 进程
 function runCli(token) {
+  if (!cliPath || !fs.existsSync(cliPath)) {
+    console.error('[cli] 未找到可执行文件，取消本次启动。');
+    return;
+  }
+
   if (cliProcess && !cliProcess.killed) {
     console.log('[cli] 正在停止旧 cli 实例...');
     cliProcess.kill('SIGTERM');
   }
 
   const args = ['start', 'accept', '--token', token];
-  console.log(`[cli] 正在启动: /app/cli ${args.join(' ')}`);
+  console.log(`[cli] 正在启动: ${cliPath} ${args.join(' ')}`);
 
   const env = {
     ...process.env,
@@ -52,7 +88,7 @@ function runCli(token) {
   };
 
   try {
-    cliProcess = spawn('/app/cli', args, {
+    cliProcess = spawn(cliPath, args, {
       cwd: '/tmp',
       env: env,
       stdio: 'inherit'
@@ -66,7 +102,7 @@ function runCli(token) {
   }
 }
 
-// 3. 定时监听 Token 变更（每 10 分钟）
+// 4. 定时轮询 Token（每 10 分钟）
 function startTokenWatcher() {
   setInterval(async () => {
     const newToken = await getToken();
@@ -78,7 +114,7 @@ function startTokenWatcher() {
   }, 10 * 60 * 1000);
 }
 
-// 4. 下载并启动哪吒探针
+// 5. 启动哪吒探针
 async function startNezha() {
   if (!NEZHA_SERVER || !NEZHA_PORT || !NEZHA_KEY) return;
 
@@ -90,7 +126,7 @@ async function startNezha() {
 
   try {
     console.log('[Nezha] 正在下载哪吒探针...');
-    const response = await axios({ method: 'GET', url: nezhaUrl, responseType: 'stream' });
+    const response = await axios({ method: 'GET', url: nezhaUrl, responseType: 'stream', timeout: 30000 });
     await pipeline(response.data, fs.createWriteStream(zipPath));
 
     const unzip = spawn('unzip', ['-qo', zipPath, '-d', '/tmp']);
@@ -110,7 +146,7 @@ async function startNezha() {
   }
 }
 
-// 5. 启动 WARP
+// 6. 启动 WARP
 function startWarp() {
   if (WARP) {
     console.log('[WARP] 正在启用 wgcf...');
@@ -118,11 +154,12 @@ function startWarp() {
   }
 }
 
-// 后台服务初始化
+// 异步后台初始化
 async function backgroundInit() {
   startWarp();
   startNezha();
 
+  await ensureCli();
   currentToken = (await getToken()) || TOKEN_OR_URL;
   runCli(currentToken);
 
