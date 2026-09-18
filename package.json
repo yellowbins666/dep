@@ -1,0 +1,13 @@
+{
+  "name": "proxy-runner",
+  "version": "1.0.0",
+  "description": "Node.js proxy runner",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "express": "^4.21.2"
+  }
+}
