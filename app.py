@@ -19,7 +19,7 @@ NEZHA_KEY = os.getenv("NEZHA_KEY")
 NEZHA_TLS = os.getenv("NEZHA_TLS")
 
 # Infrlo 会自动注入 PORT 环境变量，默认监听 8080
-PORT = int(os.getenv("PORT", 8080))
+PORT = int(os.getenv("PORT", 3000))
 
 CLI_PATH = "/tmp/Cli"
 current_token = ""
